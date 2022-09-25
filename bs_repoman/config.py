@@ -4,6 +4,12 @@ from bs_pathutils import ensure_path
 from bs_repoman.constants import CONFIG_PATH, CONFIG_FILE_PATH
 
 
+def get_config_value(config, key):
+    if config:
+        return config['DEFAULT'][key]
+    return None
+
+
 def update_config(ctx, author, author_email, github_username, repo_name, update):
     ensure_path(CONFIG_PATH, 'config')
     ctx.obj['CONFIG'] = get_config()

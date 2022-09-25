@@ -1,11 +1,12 @@
 from os.path import exists
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='bs-repoman',
     author="Bill Schumacher",
     author_email="34168009+BillSchumacher@users.noreply.github.com",
     version='0.2.0',
+    packages=find_packages(),
     py_modules=['bs_repoman'],
     install_requires=[
         'Click',
