@@ -5,9 +5,7 @@ from bs_repoman.constants import CONFIG_PATH, CONFIG_FILE_PATH
 
 
 def get_config_value(config, key):
-    if config:
-        return config['DEFAULT'][key]
-    return None
+    return config['DEFAULT'][key] if config else None
 
 
 def update_config(ctx, author, author_email, github_username, repo_name, update):
