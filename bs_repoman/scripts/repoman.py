@@ -1,46 +1,65 @@
 import click
-import os
-from pathlib import Path
-from shutil import copytree
-import sys
 import logging
-from typing import Optional, Tuple, List
 from bs_pathutils import ensure_path
+from contextvars import ContextVar
 
-logger = logging.getLogger("bs_repoman")
-logging.basicConfig(level=logging.INFO)
+from bs_repoman.config import update_config, get_config, get_config_value
+from bs_repoman.constants import BASE_PATH, CACHE_PATH, GITHUB_TEMPLATES_PATH_ALL
+from bs_repoman.gh_templates import ensure_github_template, get_template_specific_path, get_files_affected, \
+    process_template_files, copy_template_files
+from bs_repoman.log import logger
 
-
-_BASE_PATH = Path(os.getcwd()).resolve()
-_HOME_PATH = Path.home()
-_CONFIG_PATH = _HOME_PATH / '.config' / 'bs_repoman'
-_CACHE_PATH = _HOME_PATH / '.cache' / 'bs_repoman'
+_config = ContextVar('config', default=None)
 
 
 @click.group()
-def cli():
+@click.option('--author', prompt='Your name please', prompt_required=False,
+              default=lambda: get_config_value(_config.get(), 'author'))
+@click.option('--author-email', prompt='Your email-address please', prompt_required=False,
+              default=lambda: get_config_value(_config.get(), 'author_email'))
+@click.option('--github-username', prompt='Your github username please', prompt_required=False,
+              default=lambda: get_config_value(_config.get(), 'github_username'))
+@click.option('--repo-name', default=lambda: BASE_PATH.name)
+@click.option('--debug/--no-debug', default=False)
+@click.option('--update/--no-update', default=False)
+@click.pass_context
+def base_cli(ctx, author, author_email, github_username, repo_name, debug, update):
     """Helps to eliminate repo boilerplate stuff."""
+    ctx.ensure_object(dict)
+    ctx.obj['DEBUG'] = debug
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+
     logger.info("Starting bs_repoman...")
-    ensure_path(_CACHE_PATH, 'cache')
-    ensure_path(_CONFIG_PATH, 'config')
+    log_args(author, author_email, github_username, repo_name, update)
+    ensure_path(CACHE_PATH, 'cache')
+    update_config(ctx, author, author_email, github_username, repo_name, update)
 
 
-@cli.command()
+def log_args(author, author_email, github_username, repo_name, update):
+    logger.debug("Debug mode is on")
+    logger.debug("Author: %s", author)
+    logger.debug("Author email: %s", author_email)
+    logger.debug("Github username: %s", github_username)
+    logger.debug("Repo name: %s", repo_name)
+    logger.debug("Update: %s", update)
+
+
+def cli():
+    config = get_config()
+    _config.set(config)
+    base_cli(obj={})
+
+
+@base_cli.command()
 @click.option('--language', default="python", help="Install github boilerplate.")
-def install_github_template(language: str) -> None:
-    click.echo('Initializing github issue templates.')
-    _github_template_path = _CACHE_PATH / 'bs-repoman-github-templates'
-    if not _github_template_path.exists():
-        logger.info("Did not find repo at %s. Cloning bs-repoman-github-templates...", _github_template_path)
-        os.system(f'git clone git@github.com:BillSchumacher/bs-repoman-github-templates.git {_github_template_path}')
-        logger.info("Cloned bs-repoman-github-templates... to %s", _github_template_path)
-
-    _github_template_path_all = _github_template_path / 'all'
-    if language == "python":
-        _github_template_path_specific = _github_template_path / 'python'
-    else:
-        raise NotImplementedError(f"Language {language} not implemented.")
-
-    copytree(_github_template_path_all, _BASE_PATH, dirs_exist_ok=True)
-    copytree(_github_template_path_specific, _BASE_PATH, dirs_exist_ok=True)
-    logger.info("Copied github templates to %s", _BASE_PATH)
+@click.pass_context
+def install_github_template(ctx, language: str) -> None:
+    click.echo('Initializing github template...')
+    ensure_github_template(ctx)
+    github_template_path_specific = get_template_specific_path(language)
+    copy_template_files(github_template_path_specific)
+    all_files = get_files_affected(GITHUB_TEMPLATES_PATH_ALL, github_template_path_specific)
+    logger.debug("All files affected: %s", all_files)
+    process_template_files(all_files, ctx)
+    click.echo('Initialized github template!')
